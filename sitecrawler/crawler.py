@@ -7,9 +7,18 @@ from urllib.parse import urljoin
 import requests
 from bs4 import BeautifulSoup
 
+from .netguard import BlockedURL
 from .urls import normalize_url, resolve_link, same_site
 
 DEFAULT_USER_AGENT = "SiteCrawler/1.0 (+https://github.com/eyupturkaslan/WebSiteCrawler)"
+DEFAULT_MAX_BYTES = 5 * 1024 * 1024
+MAX_REDIRECTS = 10
+
+
+def _error_text(exc):
+    if isinstance(exc, BlockedURL):
+        return f"Engellendi: {exc}"
+    return type(exc).__name__
 
 
 @dataclass
@@ -66,7 +75,7 @@ class CrawlResult:
 class Crawler:
     def __init__(self, start_url, max_pages=200, max_depth=5, delay=0.0, timeout=10.0,
                  respect_robots=True, check_external=False, user_agent=DEFAULT_USER_AGENT,
-                 on_page=None):
+                 on_page=None, guard=None, max_bytes=DEFAULT_MAX_BYTES):
         if "://" not in start_url:
             start_url = "http://" + start_url
         self.start_url = normalize_url(start_url)
@@ -77,6 +86,9 @@ class Crawler:
         self.respect_robots = respect_robots
         self.check_external = check_external
         self.on_page = on_page
+        # Optional netguard.URLGuard; checked before every request and redirect hop.
+        self.guard = guard
+        self.max_bytes = max_bytes
         self.session = requests.Session()
         self.session.headers["User-Agent"] = user_agent
         self._robots = None
@@ -121,14 +133,15 @@ class Crawler:
         page = Page(url=url, depth=depth)
         started = time.monotonic()
         try:
-            response = self.session.get(url, timeout=self.timeout)
-        except requests.exceptions.RequestException as exc:
-            page.error = type(exc).__name__
+            response, final_url, body = self._request(
+                "GET", url, read_body=lambda r: "html" in r.headers.get("Content-Type", "").lower())
+        except (requests.exceptions.RequestException, BlockedURL) as exc:
+            page.error = _error_text(exc)
             page.elapsed_ms = int((time.monotonic() - started) * 1000)
             return page, []
         page.elapsed_ms = int((time.monotonic() - started) * 1000)
         page.status = response.status_code
-        page.final_url = normalize_url(response.url)
+        page.final_url = normalize_url(final_url)
         page.content_type = response.headers.get("Content-Type", "").lower()
         if not page.ok or not page.is_html:
             return page, []
@@ -138,7 +151,37 @@ class Crawler:
         # Only trust the declared encoding when the server actually sent a charset;
         # otherwise let BeautifulSoup sniff it (requests would assume ISO-8859-1).
         declared = response.encoding if "charset=" in page.content_type else None
-        return page, self._parse(page, response.content, declared)
+        return page, self._parse(page, body, declared)
+
+    def _request(self, method, url, read_body=False):
+        """Send a request, following redirects by hand so that every hop passes the guard.
+
+        Returns (response, final_url, body). The body is read only when read_body is true
+        (or a callable returning true for the response) and is capped at max_bytes.
+        """
+        for _ in range(MAX_REDIRECTS + 1):
+            if self.guard:
+                self.guard.check(url)
+            response = self.session.request(method, url, timeout=self.timeout,
+                                            allow_redirects=False, stream=True)
+            if response.is_redirect:
+                response.close()
+                url = urljoin(url, response.headers["Location"])
+                continue
+            with response:
+                wanted = read_body(response) if callable(read_body) else read_body
+                body = self._read_limited(response) if wanted else b""
+            return response, url, body
+        raise requests.exceptions.TooManyRedirects(f"{MAX_REDIRECTS}'dan fazla yönlendirme")
+
+    def _read_limited(self, response):
+        chunks, size = [], 0
+        for chunk in response.iter_content(64 * 1024):
+            chunks.append(chunk)
+            size += len(chunk)
+            if size >= self.max_bytes:
+                break
+        return b"".join(chunks)[:self.max_bytes]
 
     def _parse(self, page, html, encoding=None):
         soup = BeautifulSoup(html, "html.parser", from_encoding=encoding)
@@ -170,26 +213,25 @@ class Crawler:
     def _check_link(self, url):
         check = LinkCheck(url=url)
         try:
-            response = self.session.head(url, timeout=self.timeout, allow_redirects=True)
+            response, _, _ = self._request("HEAD", url)
             if response.status_code in (403, 405, 501):
-                # Many servers reject HEAD; confirm with a streamed GET.
-                response = self.session.get(url, timeout=self.timeout, stream=True)
-                response.close()
+                # Many servers reject HEAD; confirm with a GET without downloading the body.
+                response, _, _ = self._request("GET", url)
             check.status = response.status_code
-        except requests.exceptions.RequestException as exc:
-            check.error = type(exc).__name__
+        except (requests.exceptions.RequestException, BlockedURL) as exc:
+            check.error = _error_text(exc)
         return check
 
     def _load_robots(self):
         parser = robotparser.RobotFileParser()
         robots_url = urljoin(self.start_url, "/robots.txt")
         try:
-            response = self.session.get(robots_url, timeout=self.timeout)
-        except requests.exceptions.RequestException:
+            response, _, body = self._request("GET", robots_url, read_body=True)
+        except (requests.exceptions.RequestException, BlockedURL):
             return None
         if response.status_code != 200:
             return None
-        parser.parse(response.text.splitlines())
+        parser.parse(body.decode("utf-8", "replace").splitlines())
         return parser
 
     def _allowed(self, url):

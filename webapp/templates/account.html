@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Hesabım — Site Denetçisi{% endblock %}
+{% block content %}
+<h1>Hesabım</h1>
+<section class="card narrow">
+  <h2>Parola değiştir</h2>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Mevcut parola <input name="current_password" type="password" autocomplete="current-password" required></label>
+    <label>Yeni parola <input name="new_password" type="password" autocomplete="new-password" required minlength="10" maxlength="128"></label>
+    <label>Yeni parola (tekrar) <input name="new_password_confirm" type="password" autocomplete="new-password" required minlength="10" maxlength="128"></label>
+    <button class="primary">Parolayı değiştir</button>
+  </form>
+</section>
+<section class="card narrow">
+  <h2>Oturumlar</h2>
+  <p class="muted">Başka bir cihazda açık kalmış olabilecek tüm oturumları kapatır.</p>
+  <form method="post" action="{{ url_for('auth.logout_all') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="danger">Tüm cihazlardan çıkış yap</button>
+  </form>
+</section>
+{% endblock %}

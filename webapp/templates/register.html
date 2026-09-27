@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Kayıt — Site Denetçisi{% endblock %}
+{% block content %}
+<section class="auth card">
+  <h1>Kayıt ol</h1>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Kullanıcı adı <input name="username" value="{{ username }}" autocomplete="username" required pattern="[A-Za-z0-9_.\-]{3,32}" maxlength="32"></label>
+    <label>Parola <input name="password" type="password" autocomplete="new-password" required minlength="10" maxlength="128"></label>
+    <label>Parola (tekrar) <input name="password_confirm" type="password" autocomplete="new-password" required minlength="10" maxlength="128"></label>
+    <p class="muted small">En az 10 karakter; kullanıcı adınızı içermemeli.</p>
+    <button class="primary">Hesap oluştur</button>
+  </form>
+  <p class="muted"><a href="{{ url_for('auth.login') }}">Girişe dön</a></p>
+</section>
+{% endblock %}

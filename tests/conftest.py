@@ -12,6 +12,15 @@ class QuietHandler(SimpleHTTPRequestHandler):
     def log_message(self, *args):
         pass
 
+    def do_GET(self):
+        if self.path == "/go-internal":
+            # Simulates a public page that redirects the crawler to an internal address.
+            self.send_response(302)
+            self.send_header("Location", f"http://localhost:{self.server.server_address[1]}/about.html")
+            self.end_headers()
+            return
+        super().do_GET()
+
 
 @pytest.fixture(scope="session")
 def site_url():

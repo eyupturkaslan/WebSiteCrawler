@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block head %}{% if crawl.status in ('queued', 'running') %}<meta http-equiv="refresh" content="3">{% endif %}{% endblock %}
+{% block title %}Tarama — Site Denetçisi{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('crawls.dashboard') }}">← Taramalar</a></p>
+<h1 class="url">{{ crawl.url }}</h1>
+<section class="card">
+  <p>Durum: <span class="status {{ crawl.status }}">{{ {'queued': 'Sırada', 'running': 'Taranıyor', 'done': 'Tamamlandı', 'failed': 'Başarısız'}[crawl.status] }}</span></p>
+  <p class="muted">En fazla {{ options.max_pages }} sayfa · derinlik {{ options.max_depth }}{% if options.check_external %} · dış linkler kontrol ediliyor{% endif %} · başlangıç {{ crawl.created_at | int | datetime }}</p>
+  {% if crawl.status in ('queued', 'running') %}
+  <p class="muted">Sayfa her 3 saniyede kendini yeniler.</p>
+  {% elif crawl.status == 'failed' %}
+  <p class="flash error">{{ crawl.error }}</p>
+  {% else %}
+  <div class="stats">
+    <div><b>{{ crawl.health_score }}</b><span>Sağlık puanı</span></div>
+    <div><b>{{ crawl.pages_crawled }}</b><span>Sayfa</span></div>
+    <div><b>{{ crawl.errors }}</b><span>Hata</span></div>
+    <div><b>{{ crawl.warnings }}</b><span>Uyarı</span></div>
+  </div>
+  <p class="actions">
+    <a class="button primary" href="{{ url_for('crawls.report', crawl_id=crawl.id) }}" target="_blank" rel="noopener">Raporu aç</a>
+    <a class="button" href="{{ url_for('crawls.report_json', crawl_id=crawl.id) }}">JSON indir</a>
+  </p>
+  {% endif %}
+  {% if crawl.status not in ('queued', 'running') %}
+  <form method="post" action="{{ url_for('crawls.delete', crawl_id=crawl.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="danger">Taramayı sil</button>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}

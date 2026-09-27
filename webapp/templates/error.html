@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}{{ code }} — Site Denetçisi{% endblock %}
+{% block content %}
+<section class="auth card">
+  <h1>{{ {400: 'Geçersiz istek', 403: 'Erişim yok', 404: 'Bulunamadı', 405: 'İzin verilmeyen işlem', 413: 'İstek çok büyük', 429: 'Çok fazla istek', 500: 'Sunucu hatası'}.get(code, 'Hata') }}</h1>
+  {% if message %}<p>{{ message }}</p>{% endif %}
+  <p><a href="{{ url_for('crawls.dashboard') }}">Ana sayfaya dön</a></p>
+</section>
+{% endblock %}

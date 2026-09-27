@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Giriş — Site Denetçisi{% endblock %}
+{% block content %}
+<section class="auth card">
+  <h1>Giriş yap</h1>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Kullanıcı adı <input name="username" value="{{ username }}" autocomplete="username" required autofocus maxlength="64"></label>
+    <label>Parola <input name="password" type="password" autocomplete="current-password" required maxlength="256"></label>
+    <button class="primary">Giriş</button>
+  </form>
+  {% if config.ALLOW_SIGNUP %}<p class="muted">Hesabınız yok mu? <a href="{{ url_for('auth.register') }}">Kayıt olun</a></p>{% endif %}
+</section>
+{% endblock %}

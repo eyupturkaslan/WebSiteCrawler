@@ -1,7 +1,8 @@
 # WebSiteCrawler — Site Sağlık Denetçisi
 
 Bir web sitesini baştan sona tarayıp **kırık linkleri** ve **temel SEO sorunlarını** bulan,
-sonuçları tek dosyalık bir **HTML raporu** (isteğe bağlı JSON) olarak veren komut satırı aracı.
+sonuçları tek dosyalık bir **HTML raporu** (isteğe bağlı JSON) olarak veren araç.
+İki şekilde kullanılabilir: **komut satırından** veya giriş gerektiren bir **web panelinden**.
 
 ## Kurulum
 
@@ -51,6 +52,64 @@ nereden düzelteceğinizi hemen görürsünüz. Rapor ayrıca 0–100 arası bir
 - HTML olmayan içeriği (PDF, resim…) kaydeder ama içinde link aramaz.
 - Sunucu `charset` bildirmese bile Türkçe karakterleri doğru çözer.
 - Varsayılan olarak `robots.txt` kurallarına uyar.
+
+## Web paneli
+
+Kullanıcılar giriş yapıp tarayıcıdan tarama başlatır, geçmiş taramalarını ve raporlarını görür.
+Her kullanıcı yalnızca kendi taramalarını görebilir.
+
+```bash
+flask --app webapp create-user eyup      # parola gizli olarak sorulur
+flask --app webapp run                   # http://127.0.0.1:5000
+```
+
+Canlı ortamda Flask'ın geliştirme sunucusu yerine bir WSGI sunucusu (ör. `gunicorn "webapp:create_app()"`)
+ve önünde HTTPS sağlayan bir ters vekil sunucu (nginx, Caddy…) kullanın.
+
+### Ayarlar (ortam değişkenleri)
+
+| Değişken | Açıklama | Varsayılan |
+|---|---|---|
+| `SITECRAWLER_SECRET_KEY` | Oturum imzalama anahtarı. Verilmezse `instance/secret_key` dosyasında rastgele üretilir | otomatik |
+| `SITECRAWLER_DATABASE` | SQLite veritabanı yolu | `instance/sitecrawler.db` |
+| `SITECRAWLER_COOKIE_SECURE` | Çerezleri yalnızca HTTPS üzerinden gönder + HSTS. **Canlıda açın** | kapalı |
+| `SITECRAWLER_ALLOW_SIGNUP` | Herkesin kayıt olmasına izin ver | kapalı |
+| `SITECRAWLER_TRUST_PROXY` | Tek bir ters vekil sunucunun arkasındaysa istemci IP'sini `X-Forwarded-For`'dan al | kapalı |
+| `SITECRAWLER_ALLOW_PRIVATE_TARGETS` | Yalnızca yerel geliştirme için: localhost / iç ağ taranabilsin | kapalı |
+
+### Güvenlik önlemleri
+
+**Giriş ve oturum**
+- Parolalar düz metin değil, `scrypt` ile tuzlanıp hash'lenerek saklanır. En az 10 karakter,
+  yaygın parolalar ve kullanıcı adını içeren parolalar reddedilir.
+- Kaba kuvvet koruması: aynı kullanıcı adına 15 dakikada 5, aynı IP'den 20 başarısız denemeden sonra giriş geçici olarak kilitlenir.
+- "Kullanıcı yok" ve "parola yanlış" durumları aynı mesajı verir ve aynı sürede yanıtlanır (kullanıcı adı tahmini engellenir).
+- Oturum çerezi `HttpOnly`, `SameSite=Lax`, isteğe bağlı `Secure`; 8 saat sonra düşer. Girişte oturum yenilenir (session fixation koruması).
+- Parola değiştirmek veya "tüm cihazlardan çıkış" diğer bütün oturumları geçersiz kılar.
+- Kayıt varsayılan olarak kapalıdır; kullanıcılar `create-user` komutuyla oluşturulur.
+
+**İstekler**
+- Tüm POST formlarında CSRF anahtarı zorunludur.
+- Girişten sonra yalnızca site içi adreslere yönlendirilir (open redirect yok).
+- Sıkı güvenlik başlıkları: `Content-Security-Policy`, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, HSTS.
+- Başka bir kullanıcının taramasına erişmeye çalışmak 404 döner; tarama kimlikleri tahmin edilemez rastgele değerlerdir.
+
+**Tarayıcı (SSRF koruması)**
+- Panel, `localhost`, `127.0.0.0/8`, `10.0.0.0/8`, `192.168.0.0/16`, `169.254.169.254` (bulut metadata) gibi
+  iç/özel adresleri, 80/443 dışındaki portları ve `http(s)` dışındaki şemaları taramayı reddeder.
+- Yönlendirmeler tek tek takip edilir; her adım yeniden kontrol edilir, böylece dışarıdan zararsız görünen
+  bir sayfa tarayıcıyı iç ağa yönlendiremez.
+- Yanıt boyutu 5 MB ile sınırlıdır; HTML olmayan içerik hiç indirilmez.
+- Kullanıcı başına aynı anda 1 tarama, günde 20 tarama ve tarama başına en fazla 500 sayfa.
+
+**Raporlar**
+- Taranan sitelerden gelen tüm metinler HTML'e kaçışlanarak (escape) yazılır.
+- Rapor sayfası `sandbox` CSP'si ile ayrı bir kaynakta çalışır; yalnızca raporun kendi stil ve betiği
+  (SHA-256 hash'leriyle) çalıştırılabilir, oturum çerezine erişemez.
+
+**Bilinen sınırlama:** Adres kontrolü ile bağlantı arasındaki kısa sürede DNS yanıtı değiştirilirse
+(DNS rebinding) koruma aşılabilir. Paneli internete açacaksanız sunucuyu ayrıca iç ağa erişimi
+kısıtlanmış bir ağda / güvenlik duvarı arkasında çalıştırın.
 
 ## Geliştirme
 
