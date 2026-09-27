@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="auth card">
+  <h1>Kayıt kapalı</h1>
+  <p>Yeni hesaplar yönetici tarafından oluşturulur.</p>
+  <p><a href="{{ url_for('auth.login') }}">Girişe dön</a></p>
+</section>
+{% endblock %}
